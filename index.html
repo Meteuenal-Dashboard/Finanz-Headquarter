@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ASSET MASTER [V94.37 TICKER FIX]</title>
+    <meta name="theme-color" content="#0f172a">
+    
+    <!-- STACK -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+                    colors: {
+                        'bg-main': '#0B0F19', 
+                        'panel': '#151B2B', 
+                        'border': '#2D3748',
+                        'accent': '#3182CE', 
+                        'success': '#10B981', 
+                        'danger': '#EF4444', 
+                        'warn': '#F59E0B'
+                    },
+                    boxShadow: { 'glow': '0 0 20px rgba(59, 130, 246, 0.15)' }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        body { background-color: #0B0F19; color: #F1F5F9; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        .glass { background: rgba(21, 27, 43, 0.95); border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(12px); border-radius: 12px; }
+        .mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+        
+        /* --- TICKER PERFORMANCE ENGINE FINAL --- */
+        .ticker-wrap { 
+            width: 100%; 
+            overflow: hidden; 
+            background: #0F172A; 
+            border-bottom: 1px solid #2D3748; 
+            height: 32px; 
+            line-height: 32px; 
+            display: flex; 
+            align-items: center; 
+            position: relative; 
+            z-index: 60; 
+            -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+            mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+            contain: content; 
+            pointer-events: none;
+            user-select: none;
+        }
+        
+        .ticker {
+            display: inline-block;
+            white-space: nowrap;
+            /* Hier ist die Geschwindigkeit definiert: 50s */
+            animation: ticker 50s linear infinite; 
+            will-change: transform;
+        }
+
+        @keyframes ticker {
+            0% { transform: translate3d(0, 0, 0); }
+            100% { transform: translate3d(-50%, 0, 0); }
+        }
+        
+        .ticker-item { 
+            display: inline-block; 
+            padding: 0 2rem; 
+            font-size: 11px; 
+            font-family: 'JetBrains Mono', monospace; 
+            font-weight: 600; 
+            color: #94A3B8; 
+            cursor: default; 
+            transform: translateZ(0); 
+        }
+        
+        .ticker-val { color: white; margin-left: 4px; }
+        .ticker-up { color: #10B981; }
+        .ticker-down { color: #EF4444; }
+        
+        th { font-size: 10px; text-transform: uppercase; color: #94A3B8; padding: 12px; border-bottom: 1px solid #2D3748; text-align: left; background: #151B2B; position: sticky; top: 0; z-index: 10; }
+        td { padding: 10px 12px; border-bottom: 1px solid rgba(45, 55, 72, 0.3); font-size: 13px; vertical-align: middle; }
+        
+        .live-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; animation: pulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1); flex-shrink: 0; }
+        @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.15); } 100% { opacity: 1; transform: scale(1); } }
+        
+        .progress-container { width: 100%; background-color: #1e293b; border-radius: 2px; height: 4px; overflow: hidden; margin-top: 16px; margin-bottom: 12px; }
+        .progress-bar { height: 100%; background-color: #3182ce; transition: width 1s ease-in-out; }
+
+        #company-tooltip {
+            position: fixed; display: none; z-index: 9999;
+            width: 280px; background: rgba(15, 23, 42, 0.98); 
+            border: 1px solid #3182CE; border-radius: 8px;
+            padding: 0; box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+            backdrop-filter: blur(12px); pointer-events: none;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen select-none bg-bg-main text-white">
+
+    <!-- LIVE TICKER BAR -->
+    <div class="ticker-wrap">
+        <div class="ticker" id="live-ticker-bar">
+            <span class="ticker-item uppercase">Initialisierung der Marktdaten...</span>
+        </div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="h-16 bg-panel border-b border-border flex items-center justify-between px-6 sticky top-0 z-50 shadow-2xl">
+        <div class="flex items-center gap-4">
+            <div class="w-10 h-10 bg-gradient-to-br from-blue-700 to-slate-900 rounded-lg flex items-center justify-center border border-white/10 shadow-glow">
+                <i class="fa-solid fa-building-columns text-accent text-lg"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-sm tracking-wide text-white leading-none uppercase">
+                    FINANZ-HEADQUARTER <span class="text-accent" id="header-owner-name">DIR</span> 
+                    <span class="text-[9px] text-accent ml-1 font-mono">PRO</span>
+                </h1>
+                <div class="flex items-center gap-2 text-[10px] text-emerald-400 mt-1">
+                    <span class="live-dot bg-emerald-500" id="status-dot"></span>
+                    <span id="market-status" class="tracking-widest font-bold uppercase text-xs">LIVE</span>
+                </div>
+            </div>
+        </div>
+        
+        <nav class="hidden md:flex gap-1 bg-black/20 p-1 rounded-lg border border-white/5">
+            <button onclick="App.router('dashboard')" id="nav-dashboard" class="px-5 py-1.5 rounded text-xs font-semibold text-blue-100 bg-blue-900 shadow-md transition-all">Cockpit</button>
+            <button onclick="App.router('planning')" id="nav-planning" class="px-5 py-1.5 rounded text-xs font-semibold text-gray-400 hover:text-white transition-all">Master-Plan</button>
+            <button onclick="App.router('archive')" id="nav-archive" class="px-5 py-1.5 rounded text-xs font-semibold text-gray-400 hover:text-white transition-all">Archiv</button>
+            <button onclick="App.router('ai')" id="nav-ai" class="px-5 py-1.5 rounded text-xs font-semibold text-gray-400 hover:text-purple-400 transition-all flex items-center gap-2"><i class="fa-solid fa-newspaper"></i> News</button>
+        </nav>
+
+        <div class="flex items-center gap-3">
+             <div id="sync-indicator" class="text-[10px] font-mono text-emerald-400 hidden uppercase tracking-tighter">Syncing...</div>
+             <span id="last-update-time" class="text-[9px] font-mono text-blue-400"></span>
+             
+             <button onclick="UI.Modals.openShare()" class="bg-slate-800 hover:bg-slate-700 text-blue-100 border border-blue-900 px-3 py-1.5 rounded text-xs font-bold transition shadow-lg flex items-center justify-center">
+                <i class="fa-solid fa-qrcode text-xs"></i>
+            </button>
+            
+            <button onclick="Market.syncAll(true)" id="btnRefresh" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded text-xs font-bold transition flex items-center gap-2 shadow-lg">
+                <i class="fa-solid fa-rotate"></i> Update
+            </button>
+        </div>
+    </header>
+
+    <!-- CONTENT -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-8 max-w-[1800px] mx-auto w-full space-y-8" id="main-content">
+        
+        <!-- DASHBOARD VIEW -->
+        <div id="view-dashboard" class="space-y-6 animate-fade-in">
+            <div class="glass p-8 border border-emerald-500 flex flex-col items-center justify-center text-center">
+                <div class="text-[10px] text-gray-400 uppercase font-bold tracking-widest mb-2">Aktuelles Nettovermögen</div>
+                <div class="text-4xl font-bold text-white mono mb-4" id="kpi-nav">0,00 €</div>
+                <div class="w-full max-w-2xl">
+                    <div class="progress-container">
+                        <div class="progress-bar" id="wealth-progress" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between items-center text-xs font-mono text-gray-500 mt-2">
+                        <span>Start</span>
+                        <span id="goal-target-text">Ziel: Finanzielle Freiheit</span>
+                    </div>
+                </div>
+                <div class="mt-6 space-y-1">
+                    <div class="text-sm text-gray-300 font-medium">Noch erforderlich: <span id="wealth-needed" class="mono text-white">Berechne...</span></div>
+                    <div class="text-xs text-gray-500">Voraussichtliche Zielerreichung: <span id="wealth-date" class="mono text-gray-400">Berechne...</span></div>
+                </div>
+            </div>
+
+            <!-- ACTIVE ASSETS -->
+            <div class="glass overflow-hidden border border-blue-900 flex flex-col">
+                <div class="px-6 py-4 border-b border-border bg-gray-900/30 flex justify-between items-center">
+                    <h3 class="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-accent"></i> Mein Aktives Portfolio
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-portfolio-update" onclick="Market.refreshPortfolio()" class="bg-slate-800 hover:bg-slate-700 text-blue-100 px-3 py-1 rounded text-[10px] font-bold shadow transition flex items-center gap-1 border border-blue-900">
+                            <i class="fa-solid fa-rotate"></i> Portfolio-Kurse
+                        </button>
+                        <button onclick="UI.Modals.openSearch()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded text-[10px] font-bold shadow-lg">
+                            <i class="fa-solid fa-plus"></i> ASSET HINZÜFÜGEN
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr>
+                                <th>Name / Ticker</th>
+                                <th>KGV</th>
+                                <th class="text-center w-24">Trend</th>
+                                <th class="text-right">Menge</th>
+                                <th class="text-right text-gray-400">Ø Einstieg</th>
+                                <th class="text-right text-accent font-bold">Live Kurs (Sheet)</th>
+                                <th class="text-right text-white">Wert</th>
+                                <th class="text-right text-white">G/V</th>
+                                <th class="text-center w-32">Aktion</th>
+                            </tr>
+                        </thead>
+                        <tbody id="portfolio-body"></tbody>
+                    </table>
+                </div>
+                <div id="empty-portfolio" class="p-16 text-center text-gray-500 text-sm">Keine Assets im Depot. Datenbank lädt...</div>
+            </div>
+
+            <!-- GLOBAL DB SEARCH -->
+            <div class="glass overflow-hidden border border-blue-900">
+                <div class="px-6 py-4 border-b border-border bg-gray-900/30 flex justify-between items-center">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                        <i class="fa-solid fa-database text-accent"></i> Global Master Database (Top 25 / Flop 25)
+                    </h3>
+                    <input type="text" id="expert-search" oninput="UI.searchExperts()" placeholder="In 7.000+ Assets suchen..." class="bg-black/40 border border-border rounded px-3 py-1 text-xs text-white outline-none focus:border-accent w-64">
+                </div>
+                <div class="h-96 overflow-y-auto custom-scroll">
+                    <table class="w-full text-left">
+                        <thead class="sticky top-0 bg-slate-800 z-10 shadow-md">
+                            <tr>
+                                <th class="pl-6 w-12">#</th>
+                                <th>Unternehmen</th>
+                                <th>Ticker (Sheet)</th>
+                                <th class="text-right">LIVE KURS (Sheet)</th>
+                                <th class="text-right">Trend %</th>
+                                <th class="text-right">Add</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expert-body"></tbody>
+                    </table>
+                    <div id="expert-loading" class="p-20 text-center text-gray-500">Daten werden synchronisiert...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PLANNING VIEW -->
+        <div id="view-planning" class="hidden space-y-6 animate-fade-in">
+             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-3 space-y-4">
+                    <div class="glass p-5 border border-border">
+                        <h3 class="text-xs font-bold text-blue-400 mb-4 uppercase tracking-widest">Master-Plan</h3>
+                        <div class="space-y-4 text-xs">
+                             <div><label class="block text-emerald-400 font-bold mb-1">Name</label><input id="plan-owner" type="text" class="w-full bg-black/30 border border-emerald-600/50 rounded p-2 text-white outline-none" oninput="Planner.saveName()"></div>
+                             <div><label class="block text-gray-400 mb-1">Wunsch-Rente (mtl.)</label><input id="plan-goal" type="number" class="w-full bg-black/30 border border-gray-600 rounded p-2 text-white outline-none" value="2500" oninput="Planner.calc()"></div>
+                             <div><label class="block text-gray-400 mb-1">Alter</label><input id="plan-age" type="number" class="w-full bg-black/30 border border-gray-600 rounded p-2 text-white outline-none" value="35" oninput="Planner.calc()"></div>
+                             <div><label class="block text-gray-400 mb-1">Zielalter</label><input id="plan-target" type="number" class="w-full bg-black/30 border border-gray-600 rounded p-2 text-white outline-none" value="55" oninput="Planner.calc()"></div>
+                             <div><label class="block text-gray-400 mb-1">Sparrate mtl. (€)</label><input id="plan-save" type="number" class="w-full bg-black/30 border border-gray-600 rounded p-2 text-white outline-none" value="1000" oninput="Planner.calc()"></div>
+                             <div><label class="block text-slate-400 mb-1">Erw. Rendite (% p.a.)</label><input id="plan-return" type="number" class="w-full bg-black/30 border border-gray-600 rounded p-2 text-white outline-none" value="7.0" oninput="Planner.calc()"></div>
+                             <div><label class="block text-slate-400 mb-1">Dividendenrendite (%)</label><input id="plan-yield" type="number" class="w-full bg-black/30 border border-gray-600 rounded p-2 text-white outline-none" value="3.5" step="0.1" oninput="Planner.calc()"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="lg:col-span-9 space-y-4">
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="glass p-4 border-t-2 border-emerald-500">
+                             <div class="text-[9px] text-gray-500 uppercase font-bold tracking-widest">Zielvermögen</div>
+                             <div class="text-xl font-bold mono mt-1" id="plan-wealth">0 €</div>
+                        </div>
+                        <div class="glass p-4 border-t-2 border-purple-500">
+                             <div class="text-[9px] text-gray-500 uppercase font-bold tracking-widest">mtl. Dividende</div>
+                             <div class="text-xl font-bold text-purple-400 mono mt-1" id="plan-passive">0 €</div>
+                        </div>
+                        <div class="glass p-4 border-t-2 border-blue-500">
+                             <div class="text-[9px] text-slate-500 uppercase font-bold" id="plan-gap-label">Status Lücke</div>
+                             <div class="text-xl font-bold text-blue-400 mono mt-1" id="plan-gap">Berechne...</div>
+                        </div>
+                    </div>
+                    <div class="glass p-4 h-96 border border-border">
+                        <canvas id="planChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NEWS VIEW -->
+        <div id="view-ai" class="hidden h-full animate-fade-in">
+             <div class="glass p-6 max-w-6xl mx-auto border-t-2 border-purple-500 flex flex-col h-[600px]">
+                <div class="flex items-center gap-4 mb-6 border-b border-border pb-4">
+                    <div class="w-10 h-10 bg-purple-900/30 rounded-full flex items-center justify-center text-purple-400 text-xl border border-purple-500/20"><i class="fa-solid fa-newspaper"></i></div>
+                    <div><h2 class="text-lg font-bold text-white tracking-tight">Portfolio News Center</h2><p class="text-xs text-emerald-400 font-bold uppercase tracking-widest">Onvista & Yahoo Finance & Google</p></div>
+                </div>
+                <div class="grid grid-cols-12 gap-6 h-full overflow-hidden">
+                    <div class="col-span-4 border-r border-border pr-4 overflow-y-auto custom-scroll" id="ai-asset-list"></div>
+                    <div class="col-span-8 flex flex-col items-center justify-center text-center p-8" id="ai-detail-view">
+                        <div class="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mb-4 text-gray-600"><i class="fa-solid fa-magnifying-glass text-2xl"></i></div>
+                        <h3 class="text-lg font-bold text-white">Wähle ein Asset</h3>
+                        <p class="text-sm text-gray-500">Klicke links auf ein Asset für News & Analysen.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ARCHIVE VIEW -->
+        <div id="view-archive" class="hidden space-y-6 animate-fade-in">
+             <div class="glass overflow-hidden border border-border">
+                <div class="px-6 py-4 border-b border-border bg-gray-900/30 flex justify-between items-center">
+                    <h3 class="text-xs font-bold text-warn uppercase tracking-widest">Realisierte Historie</h3>
+                    <span class="text-xs font-mono text-gray-400" id="archive-total-pl">Gesamt G/V: 0,00 €</span>
+                </div>
+                <table class="w-full">
+                    <thead>
+                        <tr><th class="pl-6">Datum</th><th>Asset</th><th>Grund / Lektion</th><th class="text-right">Menge</th><th class="text-right">Ergebnis (P&L)</th><th class="text-center w-32">Option</th></tr>
+                    </thead>
+                    <tbody id="archive-body"></tbody>
+                </table>
+                <div id="empty-archive" class="hidden p-16 text-center text-gray-500 text-sm">Keine archivierten Daten vorhanden.</div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- COMPANY TOOLTIP -->
+    <div id="company-tooltip">
+        <div class="bg-gray-900/90 border-b border-blue-500 p-3 flex justify-between items-center rounded-t-lg">
+            <h4 class="font-bold text-white text-sm" id="tip-name">---</h4>
+            <span class="text-[9px] bg-blue-900 px-1.5 rounded text-blue-200" id="tip-ticker">---</span>
+        </div>
+        <div class="p-3 grid grid-cols-2 gap-2 text-[10px] text-gray-300">
+            <div>ISIN: <span id="tip-isin" class="text-white mono">---</span></div>
+            <div>Sektor: <span id="tip-sector" class="text-white">---</span></div>
+            <div>Region: <span id="tip-region" class="text-white">---</span></div>
+            <div>Dividende: <span id="tip-div" class="text-emerald-400 font-bold">---</span></div>
+            <div>Preis: <span id="tip-price" class="text-white mono font-bold">---</span></div>
+            <div>Trend: <span id="tip-change" class="font-bold">---</span></div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    
+    <!-- SEARCH MODAL -->
+    <div id="modal-search" class="hidden fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex justify-center pt-20">
+        <div class="bg-panel border border-border w-full max-w-lg rounded-xl shadow-2xl overflow-hidden h-fit">
+            <div class="p-4 border-b border-border flex justify-between items-center bg-gray-900/50">
+                <h3 class="text-sm font-bold text-white uppercase">Asset suchen</h3>
+                <button onclick="UI.Modals.close()" class="text-gray-500 hover:text-white transition"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-6">
+                <input id="search-input" type="text" class="w-full bg-black/40 border border-border rounded p-3 text-white text-sm outline-none focus:border-accent" placeholder="Suche nach Name, Ticker oder ISIN..." onkeyup="UI.searchInModal()">
+                <div id="search-results" class="mt-4 space-y-1 max-h-60 overflow-y-auto"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DETAIL MODAL (ADD NEW) -->
+    <div id="modal-add-details" class="hidden fixed inset-0 bg-black/90 z-[110] flex justify-center items-center">
+        <div class="bg-panel border border-border w-full max-w-md rounded-xl p-6 shadow-2xl">
+            <h3 class="text-lg font-bold text-white mb-4" id="det-name-header">Position hinzufügen</h3>
+            <form onsubmit="Core.addExec(event)" class="space-y-4">
+                <input type="hidden" id="final-index">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-[10px] text-accent font-bold uppercase mb-1">Menge</label><input id="final-qty" type="number" step="any" class="w-full bg-black/40 border border-border rounded p-2 text-white outline-none" required></div>
+                    <div><label class="block text-[10px] text-accent font-bold uppercase mb-1">Kaufpreis (€)</label><input id="final-buy" type="number" step="any" class="w-full bg-black/40 border border-border rounded p-2 text-white outline-none" required></div>
+                </div>
+                <div class="flex justify-end gap-3 pt-4">
+                    <button type="button" onclick="UI.Modals.close()" class="text-xs text-gray-500">Abbrechen</button>
+                    <button type="submit" class="bg-success text-white px-6 py-2 rounded text-xs font-bold shadow-lg">IM PORTFOLIO SPEICHERN</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- BUY MORE MODAL -->
+    <div id="modal-buy-more" class="hidden fixed inset-0 bg-black/90 z-[110] flex justify-center items-center">
+        <div class="bg-panel border border-border w-full max-w-md rounded-xl p-6 shadow-2xl">
+            <h3 class="text-lg font-bold text-emerald-400 mb-4">Position aufstocken</h3>
+            <p class="text-xs text-gray-400 mb-4">Der Durchschnittskaufpreis wird automatisch neu berechnet.</p>
+            <form onsubmit="Core.buyMoreExec(event)" class="space-y-4">
+                <input type="hidden" id="buy-more-idx">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-[10px] text-emerald-400 font-bold uppercase mb-1">Neue Menge</label><input id="buy-more-qty" type="number" step="any" class="w-full bg-black/40 border border-border rounded p-2 text-white outline-none" required></div>
+                    <div><label class="block text-[10px] text-emerald-400 font-bold uppercase mb-1">Preis pro Aktie (€)</label><input id="buy-more-price" type="number" step="any" class="w-full bg-black/40 border border-border rounded p-2 text-white outline-none" required></div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="UI.Modals.close()" class="text-xs font-bold text-gray-400">Abbrechen</button>
+                    <button type="submit" class="bg-emerald-600 text-white px-6 py-2 rounded text-xs font-bold">NACHKAUFEN</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SELL MODAL (PARTIAL) -->
+    <div id="modal-sell" class="hidden fixed inset-0 bg-black/90 z-[100] flex justify-center items-center">
+        <div class="bg-panel border border-border w-full max-w-md rounded-xl p-6 shadow-2xl">
+            <h3 class="text-lg font-bold text-white mb-4">Verkauf archivieren</h3>
+            <form onsubmit="Core.sellExec(event)">
+                <input type="hidden" id="sell-idx">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-orange-400 uppercase mb-1">Verkaufsmenge (Max: <span id="sell-max-qty">0</span>)</label>
+                        <input id="sell-qty" type="number" step="any" class="w-full bg-black/40 border border-border rounded p-2 text-white outline-none" required>
+                    </div>
+                    <div><label class="block text-[10px] font-bold text-orange-400 uppercase mb-1">Verkaufspreis (€)</label><input id="sell-price" type="number" step="any" class="w-full bg-black/40 border border-border rounded p-2 text-white outline-none" required></div>
+                    <div><label class="block text-[10px] font-bold text-orange-400 uppercase mb-1">Warum verkauft?</label><textarea id="sell-reason" class="w-full bg-black/40 border border-border rounded p-2 text-white text-xs h-20 outline-none" required placeholder="Grund eingeben..."></textarea></div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="UI.Modals.close()" class="text-xs font-bold text-gray-400">Abbrechen</button>
+                    <button type="submit" class="bg-danger text-white px-6 py-2 rounded text-xs font-bold">BESTÄTIGEN</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- RESTORE MODAL -->
+    <div id="modal-restore" class="hidden fixed inset-0 bg-black/90 z-[110] flex justify-center items-center">
+        <div class="bg-panel border border-border w-full max-w-md rounded-xl p-6 shadow-2xl">
+            <h3 class="text-lg font-bold text-blue-400 mb-4">Position wiederherstellen</h3>
+            <p class="text-xs text-gray-400 mb-4">Asset wieder ins aktive Portfolio aufnehmen.</p>
+            <form onsubmit="Core.restoreExec(event)" class="space-y-4">
+                <input type="hidden" id="restore-idx">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[10px] text-blue-400 font-bold uppercase mb-1">Menge (Verfügbar: <span id="restore-max-qty"></span>)</label>
+                        <input id="restore-qty" type="number" step="any" class="w-full bg-black/40 border border-border rounded p-2 text-white outline-none" required>
+                    </div>
+                    <div><label class="block text-[10px] text-blue-400 font-bold uppercase mb-1">Einstiegskurs (€)</label><input id="restore-price" type="number" step="any" class="w-full bg-black/40 border border-border rounded p-2 text-white outline-none" required></div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="UI.Modals.close()" class="text-xs font-bold text-gray-400">Abbrechen</button>
+                    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded text-xs font-bold">WIEDERHERSTELLEN</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SHARE MODAL -->
+    <div id="modal-share" class="hidden fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex justify-center items-center">
+        <div class="bg-panel border border-border w-full max-w-sm rounded-xl p-8 shadow-2xl text-center">
+            <h3 class="text-xl font-bold text-white mb-4">Teilen & Installieren</h3>
+            <div id="qrcode" class="bg-white p-2 rounded mx-auto mb-6 w-32 h-32 flex items-center justify-center"></div>
+            <button onclick="UI.Modals.close()" class="bg-slate-700 text-white py-2 px-6 rounded text-xs font-bold w-full">Schließen</button>
+        </div>
+    </div>
+
+<script>
+/** * FINANCE OS V94.36 - FINAL CLEANUP */
+
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTWfyYAd3wNIW97IMvxxjkRVzXQGvXCSyr0-1EVZFTJ49iYown130Z4K2DF_FxORvM4Ssm0w4jnmGAJ/pub?gid=0&single=true&output=csv';
+
+const Store = {
+    state: {
+        assets: JSON.parse(localStorage.getItem('fos_port_v94_assets')) || [], 
+        history: JSON.parse(localStorage.getItem('fos_port_v94_history')) || [], 
+        masterData: [], 
+        owner: localStorage.getItem('fos_owner') || "DIR",
+        plan: JSON.parse(localStorage.getItem('fos_plan')) || {goal:2500, age:42, target:55, save:1500, ret:8.0, yld:4.0}
+    },
+    commit: () => {
+        localStorage.setItem('fos_port_v94_assets', JSON.stringify(Store.state.assets));
+        localStorage.setItem('fos_port_v94_history', JSON.stringify(Store.state.history));
+        localStorage.setItem('fos_owner', Store.state.owner);
+        localStorage.setItem('fos_plan', JSON.stringify(Store.state.plan));
+    }
+};
+
+const Planner = {
+    saveName: () => { Store.state.owner = document.getElementById('plan-owner').value; Store.commit(); UI.render(); },
+    calc: () => {
+        const p = Store.state.plan;
+        
+        const age = parseFloat(document.getElementById('plan-age') ? document.getElementById('plan-age').value : p.age) || 35;
+        const targetAge = parseFloat(document.getElementById('plan-target') ? document.getElementById('plan-target').value : p.target) || 55;
+        const save = parseFloat(document.getElementById('plan-save') ? document.getElementById('plan-save').value : p.save) || 1000;
+        const rate = (parseFloat(document.getElementById('plan-return') ? document.getElementById('plan-return').value : p.ret) || 7.0) / 100;
+        const yld = (parseFloat(document.getElementById('plan-yield') ? document.getElementById('plan-yield').value : p.yld) || 3.5) / 100;
+        const goal = parseFloat(document.getElementById('plan-goal') ? document.getElementById('plan-goal').value : p.goal) || 2500;
+
+        const startCap = Store.state.assets.reduce((a,b) => {
+            // FIX: Uses Sheet Price if available, otherwise buy price for Planning fallback only
+            const price = b.livePrice > 0 ? b.livePrice : b.buyPrice;
+            return a + (b.qty * price);
+        }, 0);
+        
+        let wealth = startCap; 
+        const years = Math.max(0, targetAge - age); 
+        const data = []; 
+        const labels = [];
+        
+        for(let i=0; i<=years; i++) {
+            data.push(wealth); labels.push(age + i);
+            wealth = (wealth + (save * 12)) * (1 + rate);
+        }
+
+        const wealthEl = document.getElementById('plan-wealth');
+        if(wealthEl) wealthEl.innerText = wealth.toLocaleString('de-DE', {style:'currency', currency:'EUR'});
+        
+        const passive = (wealth * yld) / 12;
+        const passiveEl = document.getElementById('plan-passive');
+        if(passiveEl) passiveEl.innerText = passive.toLocaleString('de-DE', {style:'currency', currency:'EUR'});
+        
+        const gap = goal - passive;
+        const gapEl = document.getElementById('plan-gap');
+        const gapLabel = document.getElementById('plan-gap-label');
+        if(gapEl && gapLabel) {
+            if(gap > 0) {
+                gapLabel.innerText = "Status Lücke";
+                gapEl.innerText = gap.toLocaleString('de-DE', {style:'currency', currency:'EUR'});
+                gapEl.className = "text-xl font-bold text-blue-400 mono mt-1";
+            } else {
+                gapLabel.innerText = "Status Überschuss";
+                gapEl.innerText = "+" + Math.abs(gap).toLocaleString('de-DE', {style:'currency', currency:'EUR'});
+                gapEl.className = "text-xl font-bold text-emerald-400 mono mt-1";
+            }
+        }
+        
+        Planner.renderChart(labels, data);
+        
+        Store.state.plan = {goal, age, target: targetAge, save, ret: rate*100, yld: yld*100};
+        Store.commit();
+        
+        const dashboardTarget = document.getElementById('goal-target-text');
+        const dashboardProgress = document.getElementById('wealth-progress');
+        
+        if(dashboardTarget) {
+            dashboardTarget.innerText = `Ziel: ${wealth.toLocaleString('de-DE', {maximumFractionDigits:0})} €`;
+        }
+        if(dashboardProgress && wealth > 0) {
+            const progress = Math.min((startCap / wealth) * 100, 100);
+            dashboardProgress.style.width = `${progress}%`;
+        }
+    },
+    renderChart: (labels, data) => {
+        const ctx = document.getElementById('planChart'); if(!ctx) return;
+        if(Planner.chart) Planner.chart.destroy();
+        Planner.chart = new Chart(ctx.getContext('2d'), { 
+            type: 'line', 
+            data: { 
+                labels: labels, 
+                datasets: [{ label: 'Vermögen', data: data, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.4 }] 
+            }, 
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#475569' } } } } 
+        });
+    }
+};
+
+const AI = {
+    render: () => {
+        const list = document.getElementById('ai-asset-list');
+        if(!list) return;
+        list.innerHTML = '';
+        Store.state.assets.forEach((a, i) => {
+            const btn = document.createElement('button');
+            btn.className = "w-full p-4 border-b border-border text-left hover:bg-white/5 transition flex flex-col group";
+            btn.innerHTML = `<span class="font-bold text-sm group-hover:text-accent">${a.name}</span><span class="text-[10px] text-gray-500 uppercase">${a.isin || a.ticker}</span>`;
+            btn.onclick = () => AI.showDetail(i);
+            list.appendChild(btn);
+        });
+    },
+    showDetail: (idx) => {
+        const a = Store.state.assets[idx];
+        
+        let cleanTicker = a.ticker || "";
+        if (cleanTicker && cleanTicker.includes(':')) {
+            cleanTicker = cleanTicker.split(':')[1];
+        }
+        
+        const nameForYahoo = a.name; 
+        
+        // HELPER TO CLEAN NAME FOR SEARCH (REMOVES LEGAL SUFFIXES)
+        const cleanCompanyName = (n) => {
+            // Remove content in parens
+            let s = n.replace(/\s*\(.*?\)\s*/g, ''); 
+            // Remove common suffixes
+            s = s.replace(/\s+(AG|SE|Inc\.?|Corp\.?|Ltd\.?|GmbH|plc|NV|SA|Co\.?|KG|KGaA)\b/gi, '');
+            // Remove trailing non-alphanumeric just in case
+            s = s.replace(/[^a-zA-Z0-9\u00C0-\u00FF\s-]/g, '');
+            return s.trim();
+        };
+        
+        const detailView = document.getElementById('ai-detail-view');
+        if(!detailView) return;
+        detailView.innerHTML = `
+            <div class="w-full text-left bg-slate-900/50 p-6 rounded-xl border border-border animate-fade-in">
+                <h3 class="text-2xl font-bold text-white mb-1">${a.name}</h3>
+                <div class="text-sm text-accent mb-6 uppercase font-mono">Ticker: ${a.ticker} | ${a.sector}</div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <a href="https://www.onvista.de/suche?searchValue=${encodeURIComponent(cleanTicker)}" target="_blank" class="p-6 glass transform transition-all duration-300 hover:-translate-y-1 hover:scale-105 hover:shadow-glow hover:bg-orange-600/20 border-orange-500/30 flex items-center justify-center gap-4 group">
+                        <i class="fa-solid fa-chart-line text-orange-400 text-3xl group-hover:scale-110 transition"></i>
+                        <div class="text-left"><div class="font-bold text-lg">Onvista</div><div class="text-xs text-gray-500">News & Analysen</div></div>
+                    </a>
+                    <a href="https://de.finance.yahoo.com/lookup?s=${encodeURIComponent(nameForYahoo)}" target="_blank" class="p-6 glass transform transition-all duration-300 hover:-translate-y-1 hover:scale-105 hover:shadow-glow hover:bg-purple-600/20 border-purple-500/30 flex items-center justify-center gap-4 group">
+                        <i class="fa-brands fa-yahoo text-purple-400 text-3xl group-hover:scale-110 transition"></i>
+                        <div class="text-left"><div class="font-bold text-lg">Yahoo Finance</div><div class="text-xs text-gray-500">Internationale News</div></div>
+                    </a>
+                    <a href="https://www.google.com/finance/quote/${encodeURIComponent(cleanTicker)}" target="_blank" class="p-6 glass transform transition-all duration-300 hover:-translate-y-1 hover:scale-105 hover:shadow-glow hover:bg-blue-600/20 border-blue-500/30 flex items-center justify-center gap-4 group">
+                        <i class="fa-brands fa-google text-blue-400 text-3xl group-hover:scale-110 transition"></i>
+                        <div class="text-left"><div class="font-bold text-lg">Google Finanzen</div><div class="text-xs text-gray-500">Echtzeit-Daten</div></div>
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+};
+
+const UI = {
+    render: () => {
+        const ownerEl = document.getElementById('header-owner-name');
+        if(ownerEl) ownerEl.innerText = Store.state.owner;
+        
+        const tb = document.getElementById('portfolio-body');
+        const empty = document.getElementById('empty-portfolio');
+        if(!tb) return;
+        tb.innerHTML = '';
+        
+        let totVal=0;
+        
+        Store.state.assets.forEach((s, i) => {
+            // --- STRICT FIX APPLIED ---
+            // 1. Definition Sheet-Kurs: Nur vom Sheet. Fallback ist 0 (niemals Kaufpreis).
+            const SHEET_PRICE_ONLY = (typeof s.livePrice === 'number') ? s.livePrice : 0.00;
+            
+            // 2. Definition Einkaufswert: Nur lokaler Wert.
+            const USER_BUY_PRICE = s.buyPrice || 0.00;
+
+            // 3. Berechnung Wert (aktuell): Muss auf Sheet-Kurs basieren.
+            const val = s.qty * SHEET_PRICE_ONLY;
+            totVal += val;
+
+            const chg = s.dayChg || 0;
+            const colorClass = chg >= 0 ? 'text-success' : 'text-danger';
+            
+            // 4. Berechnung G/V: Wert (Sheet) - Invest (Kaufpreis)
+            const invest = s.qty * USER_BUY_PRICE;
+            const gain = val - invest;
+            const gainClass = gain >= 0 ? 'text-success' : 'text-danger';
+            const gainSign = gain >= 0 ? '+' : '';
+
+            // 5. Visuelle Anzeige: Wenn Sheet-Preis 0 ist (Ladefehler), zeige 0.00. NICHT 14.00.
+            const displayLive = SHEET_PRICE_ONLY > 0 ? SHEET_PRICE_ONLY.toFixed(2) + ' €' : '<span class="text-orange-500 animate-pulse">Laden...</span>';
+
+            // KGV Color Logic
+            let kgvClass = "text-gray-400";
+            const k = parseFloat(s.kgv);
+            if (k > 0) {
+                if (k < 15) kgvClass = "text-success font-bold";
+                else if (k > 25) kgvClass = "text-danger font-bold";
+            }
+
+            const tr = document.createElement('tr');
+            // REMOVED Rat. column
+            tr.innerHTML = `
+                <td class="font-bold">
+                    <span onclick="UI.Modals.openBuyMore(${i})" class="hover:text-accent transition cursor-pointer" onmouseenter="UI.showCompanyDetails(event, ${i}, 'portfolio')" onmouseleave="UI.hideCompanyDetails()">${s.name}</span>
+                    <div class="text-[9px] text-gray-500 font-mono uppercase">Ticker: ${s.ticker}</div>
+                </td>
+                <td class="text-xs ${kgvClass}">${s.kgv || '-'}</td>
+                <td class="text-center text-xs font-bold ${colorClass}">${chg.toFixed(2)}%</td>
+                <td class="text-right mono text-xs font-medium">${s.qty.toLocaleString()}</td>
+                <td class="text-right mono text-xs text-gray-400">${USER_BUY_PRICE.toFixed(2)} €</td>
+                <td class="text-right mono text-xs font-bold ${colorClass}">${displayLive}</td>
+                <td class="text-right mono text-xs font-bold ${colorClass}">${val.toLocaleString('de-DE', {minimumFractionDigits: 2})} €</td>
+                <td class="text-right mono text-xs font-bold ${gainClass}">${gainSign}${gain.toLocaleString('de-DE', {minimumFractionDigits: 2})} €</td>
+                <td class="text-center">
+                    <div class="flex justify-center gap-1">
+                        <button onclick="UI.Modals.openBuyMore(${i})" class="text-emerald-500 hover:text-emerald-400 px-1" title="Nachkaufen"><i class="fa-solid fa-plus-circle"></i></button>
+                        <button onclick="UI.Modals.openSell(${i})" class="text-gray-500 hover:text-warn px-1" title="Teilverkauf & Archivieren"><i class="fa-solid fa-box-archive"></i></button>
+                        <button onclick="if(confirm('Position komplett löschen (ohne Archiv)?')){Store.state.assets.splice(${i},1); Store.commit(); UI.render();}" class="text-gray-500 hover:text-danger px-1" title="Löschen"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </td>
+            `;
+            tb.appendChild(tr);
+        });
+
+        if(empty) empty.classList.toggle('hidden', Store.state.assets.length > 0);
+        
+        // --- WEALTH PROGRESS LOGIC ---
+        const kpiNav = document.getElementById('kpi-nav');
+        if(kpiNav) kpiNav.innerText = totVal.toLocaleString('de-DE', {style:'currency', currency:'EUR'});
+
+        const plan = Store.state.plan;
+        
+        const age = parseFloat(plan.age) || 35;
+        const targetAge = parseFloat(plan.target) || 55;
+        const save = parseFloat(plan.save) || 1000;
+        const rate = (parseFloat(plan.ret) || 7.0) / 100;
+        
+        let projectedWealth = totVal; 
+        const years = Math.max(0, targetAge - age);
+        
+        for(let i=0; i<=years; i++) { 
+             projectedWealth = (projectedWealth + (save * 12)) * (1 + rate);
+        }
+
+        const totalGoal = projectedWealth;
+        const targetYear = new Date().getFullYear() + years;
+        
+        const progress = totalGoal > 0 ? Math.min((totVal / totalGoal) * 100, 100) : 0;
+        document.getElementById('wealth-progress').style.width = `${progress}%`;
+        document.getElementById('goal-target-text').innerText = `Ziel: ${totalGoal.toLocaleString('de-DE', {maximumFractionDigits:0})} €`;
+
+        const missing = totalGoal - totVal;
+        const neededEl = document.getElementById('wealth-needed');
+        if(missing <= 0) {
+            neededEl.innerText = "ZIEL ERREICHT";
+            neededEl.classList.add('text-success');
+        } else {
+            neededEl.innerText = missing.toLocaleString('de-DE', {style:'currency', currency:'EUR'});
+            neededEl.classList.remove('text-success');
+        }
+
+        const dateEl = document.getElementById('wealth-date');
+        dateEl.innerText = "Zieljahr: " + targetYear;
+        
+        Planner.calc(); 
+        UI.renderArchive();
+        AI.render();
+    },
+
+    showCompanyDetails: (e, id, type) => {
+        let a;
+        if(type === 'portfolio') {
+            a = Store.state.assets[id];
+        } else {
+            a = Store.state.masterData.find(m => m.id == id);
+        }
+        
+        if (!a) return;
+
+        const tip = document.getElementById('company-tooltip');
+        
+        document.getElementById('tip-name').innerText = a.name;
+        document.getElementById('tip-ticker').innerText = a.ticker || 'N/A';
+        document.getElementById('tip-isin').innerText = a.ticker || 'N/A';
+        document.getElementById('tip-sector').innerText = a.sector;
+        document.getElementById('tip-region').innerText = a.region || 'Global';
+        document.getElementById('tip-div').innerText = (a.div || 0) + '%';
+        
+        // Strict fix in Tooltip as well
+        const price = (type === 'portfolio') ? (a.livePrice || 0) : (a.price || 0);
+        document.getElementById('tip-price').innerText = price > 0 ? price.toFixed(2) + ' €' : 'N/A';
+        
+        const chg = a.dayChg || a.change || 0;
+        const chgEl = document.getElementById('tip-change');
+        chgEl.innerText = chg.toFixed(2) + '%';
+        chgEl.className = chg >= 0 ? 'text-success font-bold' : 'text-danger font-bold';
+
+        tip.style.display = 'block';
+        const rect = e.target.getBoundingClientRect();
+        tip.style.top = (rect.top - 140) + 'px'; 
+        tip.style.left = (rect.left + 20) + 'px';
+    },
+
+    hideCompanyDetails: () => {
+        document.getElementById('company-tooltip').style.display = 'none';
+    },
+
+    renderExperts: (filter = "") => {
+        const tb = document.getElementById('expert-body');
+        if(!tb) return;
+        tb.innerHTML = '';
+        
+        let displayList = [];
+        if (filter) {
+            const query = filter.toLowerCase();
+            displayList = Store.state.masterData.filter(a => 
+                a.name.toLowerCase().includes(query) || 
+                a.isin.toLowerCase().includes(query) || 
+                a.ticker.toLowerCase().includes(query)
+            ).slice(0, 50);
+        } else {
+            const sorted = [...Store.state.masterData].sort((a, b) => b.change - a.change);
+            const winners = sorted.slice(0, 25);
+            const losers = sorted.slice(-25).reverse();
+            displayList = [...winners, ...losers];
+        }
+
+        displayList.forEach(a => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="pl-6 text-[10px] text-gray-500 font-mono">${a.id}</td>
+                <td class="font-medium text-gray-300">
+                     <span onclick="UI.Modals.openDetails(${a.id})" class="hover:text-accent transition cursor-pointer" onmouseenter="UI.showCompanyDetails(event, '${a.id}', 'master')" onmouseleave="UI.hideCompanyDetails()">${a.name}</span>
+                </td>
+                <td class="text-[10px] mono text-accent uppercase">${a.ticker}</td>
+                <td class="text-right mono text-xs">${a.price > 0 ? a.price.toFixed(2) + ' €' : '-'}</td>
+                <td class="text-right mono text-xs font-bold ${a.change >= 0 ? 'text-success' : 'text-danger'}">${a.change.toFixed(2)}%</td>
+                <td class="text-right"><button onclick="UI.Modals.openDetails(${a.id})" class="text-accent hover:text-white px-4 transition active:scale-90"><i class="fa-solid fa-plus-circle text-lg"></i></button></td>
+            `;
+            tb.appendChild(tr);
+        });
+    },
+
+    searchExperts: () => UI.renderExperts(document.getElementById('expert-search').value),
+
+    searchInModal: () => {
+        const q = document.getElementById('search-input').value.toLowerCase();
+        const res = document.getElementById('search-results');
+        if(!res) return;
+        res.innerHTML = "";
+        if(q.length < 2) return;
+        Store.state.masterData.filter(a => a.name.toLowerCase().includes(q) || a.isin.toLowerCase().includes(q)).slice(0, 10).forEach(m => {
+            const div = document.createElement('div');
+            div.className = "p-3 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 cursor-pointer flex justify-between items-center group transition";
+            div.innerHTML = `<div><div class="text-xs font-bold text-white group-hover:text-accent">${m.name}</div><div class="text-[9px] text-gray-500 uppercase">Ticker: ${m.ticker} | ${m.isin}</div></div><i class="fa-solid fa-chevron-right text-gray-500"></i>`;
+            div.onclick = () => UI.Modals.openDetails(m.id);
+            res.appendChild(div);
+        });
+    },
+
+    renderArchive: () => {
+        const tb = document.getElementById('archive-body');
+        const empty = document.getElementById('empty-archive');
+        if(!tb) return;
+        tb.innerHTML = '';
+        let total = 0;
+        Store.state.history.slice().reverse().forEach((h, i) => {
+            total += h.realizedPL || 0;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="pl-6 text-[10px] text-gray-500 font-mono">${new Date(h.sellDate).toLocaleDateString()}</td>
+                <td class="font-bold text-xs">${h.name}</td>
+                <td class="text-[10px] text-gray-400 italic">${h.reason}</td>
+                <td class="text-right mono text-xs">${h.qty || '-'} Stk.</td>
+                <td class="text-right mono text-xs font-bold ${h.realizedPL>=0?'text-success':'text-danger'}">${h.realizedPL.toFixed(2)} €</td>
+                <td class="text-center">
+                    <button onclick="UI.Modals.openRestore(${Store.state.history.length-1-i})" class="text-blue-500 hover:text-white px-2" title="Wiederherstellen"><i class="fa-solid fa-rotate-left"></i></button>
+                    <button onclick="if(confirm('Eintrag unwiderruflich löschen?')){Store.state.history.splice(${Store.state.history.length-1-i},1); Store.commit(); UI.render();}" class="text-gray-700 hover:text-white px-1" title="Löschen"><i class="fa-solid fa-trash"></i></button>
+                </td>
+            `;
+            tb.appendChild(tr);
+        });
+        const totalEl = document.getElementById('archive-total-pl');
+        if(totalEl) totalEl.innerText = `Gesamt G/V: ${total.toFixed(2)} €`;
+        if(empty) empty.classList.toggle('hidden', Store.state.history.length > 0);
+    },
+
+    Modals: {
+        openSearch: () => { document.getElementById('modal-search').classList.remove('hidden'); document.getElementById('search-input').focus(); },
+        openDetails: (id) => { 
+            const a = Store.state.masterData.find(x => x.id == id);
+            if(!a) return;
+            document.getElementById('final-index').value = id; 
+            document.getElementById('det-name-header').innerText = a.name;
+            document.getElementById('modal-search').classList.add('hidden');
+            document.getElementById('modal-add-details').classList.remove('hidden'); 
+            document.getElementById('final-qty').focus();
+        },
+        openBuyMore: (idx) => {
+            const a = Store.state.assets[idx];
+            document.getElementById('buy-more-idx').value = idx;
+            document.getElementById('modal-buy-more').classList.remove('hidden');
+            document.getElementById('buy-more-qty').focus();
+        },
+        openSell: (idx) => { 
+            const a = Store.state.assets[idx];
+            document.getElementById('sell-idx').value = idx; 
+            document.getElementById('sell-qty').value = a.qty;
+            document.getElementById('sell-max-qty').innerText = a.qty;
+            document.getElementById('sell-price').value = a.livePrice || a.buyPrice;
+            document.getElementById('modal-sell').classList.remove('hidden'); 
+        },
+        openRestore: (idx) => {
+            const h = Store.state.history[idx];
+            document.getElementById('restore-idx').value = idx;
+            document.getElementById('restore-max-qty').innerText = h.qty || 'N/A';
+            document.getElementById('restore-qty').value = h.qty || 0;
+            document.getElementById('restore-price').value = h.sellPrice || 0; 
+            document.getElementById('modal-restore').classList.remove('hidden');
+        },
+        close: () => document.querySelectorAll('[id^="modal-"]').forEach(m => m.classList.add('hidden')),
+        openShare: () => { 
+            document.getElementById('modal-share').classList.remove('hidden'); 
+            const qrBox = document.getElementById('qrcode');
+            qrBox.innerHTML = "";
+            new QRCode(qrBox, { text: window.location.href, width: 128, height: 128 });
+        }
+    }
+};
+
+const Market = {
+    proxy: 'https://corsproxy.io/?',
+    // Fallback Proxy Strategy
+    fallbackProxy: 'https://api.allorigins.win/raw?url=',
+    
+    // Removed hardcoded ticker list as it's no longer used
+
+    fetchWithRetry: async (url, options = {}, retries = 5, delay = 1000) => {
+        try {
+            const res = await fetch(url, options);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res;
+        } catch (e) {
+            if (retries <= 0) throw e;
+            await new Promise(r => setTimeout(r, delay));
+            return Market.fetchWithRetry(url, options, retries - 1, delay * 2);
+        }
+    },
+
+    loadSheet: async (skipRender = false) => {
+        const indicator = document.getElementById('sync-indicator');
+        const statusText = document.getElementById('market-status');
+        const statusDot = document.getElementById('status-dot');
+        const updateTimeEl = document.getElementById('last-update-time');
+        
+        if(indicator) indicator.classList.remove('hidden');
+        // Changed to just "LIVE" as requested
+        if(statusText) statusText.innerText = "LIVE";
+        
+        try {
+            let csvData = "";
+            const cleanUrl = CSV_URL; 
+            
+            // 1. Direct Fetch
+            try { 
+                const res = await fetch(cleanUrl, { cache: "reload", headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' } });
+                if(res.ok) csvData = await res.text();
+            } catch (e) { console.warn("Direct fetch failed."); }
+
+            // 2. Primary Proxy (Corsproxy)
+            if (!csvData) {
+                try {
+                    const encodedURL = encodeURIComponent(cleanUrl);
+                    const proxyUrl = `${Market.proxy}${encodedURL}&_t=${Date.now()}`; 
+                    const res = await Market.fetchWithRetry(proxyUrl, { cache: "no-store" });
+                    csvData = await res.text();
+                } catch(e) { console.warn("Primary Proxy failed."); }
+            }
+
+            // 3. Fallback Proxy (AllOrigins)
+            if (!csvData) {
+                 try {
+                    const fallbackUrl = `${Market.fallbackProxy}${encodeURIComponent(cleanUrl)}`;
+                    const res = await Market.fetchWithRetry(fallbackUrl, { cache: "no-store" });
+                    csvData = await res.text();
+                } catch(e) { console.warn("Fallback Proxy failed."); }
+            }
+
+            if (!csvData || csvData.length < 50) throw new Error("Keine validen CSV Daten empfangen.");
+
+            const rows = csvData.split('\n').filter(r => r.trim() !== '').map(row => {
+                const parts = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                return parts ? parts.map(p => p.trim().replace(/^"|"$/g, '')) : [];
+            });
+
+            Store.state.masterData = rows.slice(1).map((r, i) => {
+                // UNIVERSAL PARSING FIX:
+                // Egal ob "34,87 €", "34,87", "34.87" oder "EUR 34,87"
+                // 1. Hole den Rohwert aus Spalte C (Index 2) - FIX: Spalte C statt H
+                let rawPrice = r[2] || "0";
+
+                // STRIKTER FILTER: Wenn (-) im Preis steht -> Ungültig
+                if (rawPrice.includes('(-)') || rawPrice.trim() === '-') {
+                    return null;
+                }
+                
+                // 2. Entferne alles was KEINE Zahl, Komma, Punkt oder Minus ist (z.B. Währungssymbole, Leerzeichen)
+                //    Beispiel: " 34,87 " -> "34,87"
+                rawPrice = rawPrice.replace(/[^0-9.,-]/g, '');
+                
+                // 3. Ersetze Komma durch Punkt (für JS Float Konvertierung)
+                //    Beispiel: "34,87" -> "34.87"
+                rawPrice = rawPrice.replace(',', '.');
+
+                const price = parseFloat(rawPrice) || 0;
+
+                // Gleiche Logik für Change (Spalte D / Index 3) - FIXED to Column D
+                let rawChange = r[3] || "0";
+                rawChange = rawChange.replace(/[^0-9.,-]/g, '').replace(',', '.');
+                const change = parseFloat(rawChange) || 0;
+
+                // KGV from Column E (Index 4) per User Request
+                let rawKgv = r[4] || "0"; 
+                // Clean KGV similarly to avoid formatting issues
+                const kgv = parseFloat(rawKgv.replace(',', '.')) || 0;
+
+                // Ticker Cleaning per User Request (remove Exchange: part)
+                let rawTicker = r[1] || 'N/A';
+                if(rawTicker.includes(':')) {
+                    rawTicker = rawTicker.split(':')[1];
+                }
+                
+                return {
+                    id: i,
+                    name: r[0] || 'Unbenannt',
+                    ticker: rawTicker, // Use cleaned ticker
+                    wkn: r[2] || '', // Achtung: Wenn C Preis ist, ist WKN überschrieben, aber für Preis-Logic ok
+                    isin: r[3] || '',
+                    sector: r[4] || 'Sonstige',
+                    region: r[5] || 'Global',
+                    div: parseFloat(r[6]) || 0,
+                    price: price, // Jetzt aus Spalte C (Index 2)
+                    change: change, // Now from Column D (Index 3)
+                    kgv: kgv // Now mapped from Index 4 (Column E)
+                };
+            }).filter(a => a !== null && a.name !== 'Unbenannt' && a.price > 0);
+
+            Store.state.assets.forEach(asset => {
+                let match = null;
+
+                // 1. Try ID Lock (Best/Fastest - O(1))
+                // This forces the asset to stick to the exact row from the sheet it was added from
+                if (asset.sheetId !== undefined) {
+                    match = Store.state.masterData.find(m => m.id === asset.sheetId);
+                }
+
+                // 2. If no ID or ID stale, try EXTREMELY STRICT Matching
+                // REMOVED FUZZY/CONTAINS MATCHING to prevent "Commerzbank" matching "Commerzbank Put"
+                if (!match) {
+                    const aIsin = asset.isin ? asset.isin.trim().toLowerCase() : '';
+                    const aTicker = asset.ticker ? asset.ticker.trim().toLowerCase() : '';
+                    const aName = asset.name ? asset.name.trim().toLowerCase() : '';
+
+                    match = Store.state.masterData.find(m => {
+                        const mIsin = m.isin ? m.isin.trim().toLowerCase() : '';
+                        const mTicker = m.ticker ? m.ticker.trim().toLowerCase() : '';
+                        const mName = m.name ? m.name.trim().toLowerCase() : '';
+
+                        // Strict Checks Only
+                        if (aIsin && mIsin === aIsin) return true;
+                        if (aTicker && mTicker && aTicker === mTicker) return true;
+                        if (aName && mName && aName === mName) return true;
+                        
+                        return false;
+                    });
+                    
+                    // Self-Heal: Lock ID for next time
+                    if (match) {
+                        asset.sheetId = match.id;
+                    }
+                }
+
+                if (match) {
+                    // STRICT NUMBER TYPE UPDATE
+                    const mPrice = Number(match.price);
+                    if (!isNaN(mPrice)) {
+                        asset.livePrice = mPrice;
+                    }
+                    if (typeof match.change === 'number') asset.dayChg = match.change;
+                    if (typeof match.kgv === 'number') asset.kgv = match.kgv;
+                }
+            });
+            Store.commit();
+
+            if (!skipRender) UI.renderExperts();
+            
+            const loadingEl = document.getElementById('expert-loading');
+            if(loadingEl) loadingEl.classList.add('hidden');
+            
+            // Sync the ticker with the fresh data from the sheet
+            Market.syncTicker(); 
+            
+            console.log(`Pipeline: ${Store.state.masterData.length} Assets erfolgreich geladen.`);
+            if(statusText) statusText.innerText = "LIVE";
+            if(statusDot) statusDot.classList.add('animate-pulse');
+            
+            if(updateTimeEl) {
+                updateTimeEl.innerText = "Updated: " + new Date().toLocaleTimeString();
+            }
+
+        } catch (e) {
+            console.error("Sheet Sync Fehler:", e);
+        }
+        if(indicator) indicator.classList.add('hidden');
+    },
+
+    // Old fetchPrice is no longer needed as we use sheet data exclusively
+
+    refreshPortfolio: async () => {
+        const btn = document.getElementById('btn-portfolio-update');
+        if(btn) btn.innerHTML = '<i class="fa-solid fa-spin fa-rotate"></i> Syncing...';
+        await Market.loadSheet(true); 
+        UI.render();
+        if(btn) btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Portfolio-Kurse';
+    },
+
+    syncTicker: () => {
+        // Now uses data directly from the Store (Google Sheet), no extra API calls
+        const data = Store.state.masterData;
+        if(!data || data.length === 0) return;
+
+        let html = "";
+        // Filter valid assets to save space/performance
+        const validAssets = data.filter(a => a.price > 0);
+        
+        // Calculate dynamic duration: base 30s + 0.2s per asset to maintain readable speed for large lists
+        // Example: 100 assets -> 50s. 7000 assets -> 1430s (very slow and readable)
+        
+        // DEFINE dynamicDuration BEFORE USE TO FIX REFERENCE ERROR
+        const dynamicDuration = Math.max(120, validAssets.length * 5); 
+
+        validAssets.forEach(a => {
+             const color = a.change >= 0 ? 'ticker-up' : 'ticker-down';
+             const sign = a.change >= 0 ? '+' : '';
+             // Format: TICKER 123.45 (+1.23%)
+             // CHANGED: Removed link wrapper, now just span
+             html += `<span class="ticker-item"><span class="font-bold text-white">${a.ticker}</span> <span class="ticker-val ${color}">${a.price.toFixed(2)} (${sign}${a.change.toFixed(2)}%)</span></span>`;
+        });
+
+        const bar = document.getElementById('live-ticker-bar');
+        if(bar && html) {
+            // Duplicate content to ensure seamless looping for CSS animation
+            bar.innerHTML = html + html; 
+            
+            // Set dynamic animation duration using the defined variable
+            bar.style.animationDuration = `${dynamicDuration}s`;
+        }
+    },
+
+    syncAll: async (force = false) => {
+        await Market.loadSheet();
+        // syncTicker is called inside loadSheet now to ensure data availability
+        UI.render();
+    }
+};
+
+const Core = {
+    // ... existing Core methods ...
+    addExec: (e) => {
+        e.preventDefault();
+        const id = document.getElementById('final-index').value;
+        const ref = Store.state.masterData.find(x => x.id == id);
+        if(!ref) return;
+        Store.state.assets.push({
+            ...ref,
+            qty: parseFloat(document.getElementById('final-qty').value) || 0,
+            buyPrice: parseFloat(document.getElementById('final-buy').value) || 0,
+            livePrice: ref.price, 
+            dayChg: ref.change, 
+            id: Date.now(),
+            sheetId: ref.id // LOCK THE ID: Store the exact row index to prevent future mismatches
+        });
+        Store.commit(); 
+        UI.Modals.close(); 
+        UI.render();
+    },
+    buyMoreExec: (e) => {
+        e.preventDefault();
+        const idx = document.getElementById('buy-more-idx').value;
+        const addQty = parseFloat(document.getElementById('buy-more-qty').value);
+        const addPrice = parseFloat(document.getElementById('buy-more-price').value);
+        
+        const asset = Store.state.assets[idx];
+        const totalCostOld = asset.qty * asset.buyPrice;
+        const totalCostNew = addQty * addPrice;
+        
+        const newQty = asset.qty + addQty;
+        const newAvgPrice = (totalCostOld + totalCostNew) / newQty;
+        
+        asset.qty = newQty;
+        asset.buyPrice = newAvgPrice;
+        
+        Store.commit();
+        UI.Modals.close();
+        UI.render();
+    },
+    sellExec: (e) => {
+        e.preventDefault();
+        const idx = document.getElementById('sell-idx').value;
+        const sellQty = parseFloat(document.getElementById('sell-qty').value);
+        const sellPrice = parseFloat(document.getElementById('sell-price').value);
+        const reason = document.getElementById('sell-reason').value;
+        const a = Store.state.assets[idx];
+        
+        if (sellQty > a.qty) {
+            alert("Fehler: Verkaufsmenge größer als Bestand!");
+            return;
+        }
+
+        Store.state.history.push({
+            ...a, 
+            qty: sellQty,
+            sellPrice: sellPrice, 
+            reason: reason, 
+            sellDate: new Date().toISOString(), 
+            realizedPL: (sellPrice - a.buyPrice) * sellQty
+        });
+
+        if (sellQty >= a.qty) {
+            Store.state.assets.splice(idx, 1);
+        } else {
+            a.qty -= sellQty;
+        }
+
+        Store.commit(); UI.Modals.close(); UI.render();
+    },
+    restoreExec: (e) => {
+        e.preventDefault();
+        const idx = document.getElementById('restore-idx').value;
+        const restoreQty = parseFloat(document.getElementById('restore-qty').value);
+        const restorePrice = parseFloat(document.getElementById('restore-price').value);
+        const h = Store.state.history[idx];
+
+        if (restoreQty > h.qty) {
+            alert("Fehler: Menge größer als im Archiv!");
+            return;
+        }
+
+        const existingIdx = Store.state.assets.findIndex(a => a.ticker === h.ticker);
+        
+        if (existingIdx >= 0) {
+            const asset = Store.state.assets[existingIdx];
+            const totalCostOld = asset.qty * asset.buyPrice;
+            const totalCostNew = restoreQty * restorePrice;
+            asset.qty += restoreQty;
+            asset.buyPrice = (totalCostOld + totalCostNew) / asset.qty;
+        } else {
+            Store.state.assets.push({
+                ...h,
+                qty: restoreQty,
+                buyPrice: restorePrice,
+                livePrice: 0, // Reset to 0 to force sync
+                dayChg: 0,
+                id: Date.now()
+            });
+        }
+
+        if (restoreQty >= h.qty) {
+            Store.state.history.splice(idx, 1);
+        } else {
+            h.qty -= restoreQty;
+        }
+
+        Store.commit(); UI.Modals.close(); UI.render();
+    }
+};
+
+const App = {
+    // ... existing App methods ...
+    router: (v) => {
+        ['dashboard','planning','archive','ai'].forEach(id => {
+            const view = document.getElementById('view-'+id);
+            const nav = document.getElementById('nav-'+id);
+            if(view) view.classList.add('hidden');
+            if(nav) {
+                // Reset to default style (grey)
+                let cls = "px-5 py-1.5 rounded text-xs font-semibold transition-all text-gray-400 hover:text-white";
+                if(id === 'ai') cls += " flex items-center gap-2";
+                nav.className = cls;
+            }
+        });
+        const activeView = document.getElementById('view-'+v);
+        const activeNav = document.getElementById('nav-'+v);
+        
+        if(activeView) activeView.classList.remove('hidden');
+        if(activeNav) {
+             // Active Style: Blue 900 Background
+             let cls = "px-5 py-1.5 rounded text-xs font-semibold text-blue-100 bg-blue-900 shadow-md transition-all";
+             if(v === 'ai') cls += " flex items-center gap-2";
+             activeNav.className = cls;
+        }
+
+        if(v === 'ai') AI.render();
+        if(v === 'planning') Planner.calc(); 
+        if(v === 'dashboard') UI.render(); 
+    },
+    init: () => {
+        if(window.location.protocol === 'file:') {
+            console.warn("Hinweis: Datei wird lokal ausgeführt. Google Sheet Zugriff könnte blockiert werden.");
+        }
+        
+        const p = Store.state.plan;
+        
+        const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+        
+        setVal('plan-owner', Store.state.owner || "");
+        setVal('plan-goal', p.goal);
+        setVal('plan-age', p.age);
+        setVal('plan-target', p.target);
+        setVal('plan-save', p.save);
+        setVal('plan-return', p.ret);
+        setVal('plan-yield', p.yld);
+        
+        Market.syncAll();
+        setInterval(() => Market.syncAll(), 300000);
+        
+        setTimeout(() => Planner.calc(), 500); 
+    }
+};
+
+window.onload = App.init;
+</script>
