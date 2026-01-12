@@ -274,8 +274,8 @@
         <!-- PLANNING VIEW -->
         <div id="view-planning" class="hidden space-y-4 md:space-y-6 animate-fade-in w-full">
              <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6">
-                <div class="lg:col-span-3 space-y-4">
-                    <div class="glass p-4 md:p-5 border border-border">
+                <div class="lg:col-span-3">
+                    <div class="glass p-4 md:p-5 border border-border h-full">
                         <h3 class="text-xs font-bold text-blue-400 mb-3 uppercase tracking-widest">Master-Plan</h3>
                         <div class="space-y-3 text-xs">
                              <div><label class="block text-emerald-400 font-bold mb-1">Name</label><input id="plan-owner" type="text" class="w-full bg-black/30 border border-emerald-600/50 rounded p-2 text-white outline-none" oninput="Planner.saveName()"></div>
@@ -1067,10 +1067,8 @@ const Market = {
             Store.commit();
             
             if (!skipRender) {
-                // CLEAR TABLE BRIEFLY TO SHOW "FLASH" UPDATE EFFECT
-                const tb = document.getElementById('expert-body');
-                if(tb) tb.innerHTML = '';
-                setTimeout(() => UI.renderExperts(), 100); 
+                // NO FLASH: Update directly without clearing table or flashing
+                UI.renderExperts(); 
             }
             
             if(loadingEl) loadingEl.classList.add('hidden');
