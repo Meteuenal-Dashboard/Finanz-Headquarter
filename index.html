@@ -293,11 +293,11 @@
                 <div class="lg:col-span-9 space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                         <div class="glass p-4 border-t-2 border-emerald-500">
-                             <div class="text-[9px] text-gray-500 uppercase font-bold tracking-widest">Zielvermögen</div>
+                             <div class="text-[9px] text-gray-500 uppercase font-bold tracking-widest">Benötigtes Zielvermögen</div>
                              <div class="text-xl font-bold mono mt-1" id="plan-wealth">0 €</div>
                         </div>
                         <div class="glass p-4 border-t-2 border-purple-500">
-                             <div class="text-[9px] text-gray-500 uppercase font-bold tracking-widest">mtl. Dividende</div>
+                             <div class="text-[9px] text-gray-500 uppercase font-bold tracking-widest">mtl. Dividende (Prognose)</div>
                              <div class="text-xl font-bold text-purple-400 mono mt-1" id="plan-passive">0 €</div>
                         </div>
                         <div class="glass p-4 border-t-2 border-blue-500">
@@ -518,25 +518,32 @@ const Planner = {
         const yld = (parseFloat(document.getElementById('plan-yield') ? document.getElementById('plan-yield').value : p.yld) || 3.5) / 100;
         const goal = parseFloat(document.getElementById('plan-goal') ? document.getElementById('plan-goal').value : p.goal) || 2500;
 
+        // FIXED: Target Wealth is now purely calculated from the Goal, not the current assets.
+        // Formula: (Monthly Goal * 12) / Yield = Capital needed for financial freedom.
+        const requiredWealth = (goal * 12) / yld;
+
         const startCap = Store.state.assets.reduce((a,b) => {
             const price = b.livePrice > 0 ? b.livePrice : b.buyPrice;
             return a + (b.qty * price);
         }, 0);
         
-        let wealth = startCap; 
+        // This loop calculates the PROJECTED path (where you are heading), separate from the TARGET (where you need to be).
+        let projectedWealth = startCap; 
         const years = Math.max(0, targetAge - age); 
         const data = []; 
         const labels = [];
         
         for(let i=0; i<=years; i++) {
-            data.push(wealth); labels.push(age + i);
-            wealth = (wealth + (save * 12)) * (1 + rate);
+            data.push(projectedWealth); labels.push(age + i);
+            projectedWealth = (projectedWealth + (save * 12)) * (1 + rate);
         }
 
+        // Display the REQUIRED amount in the "Zielvermögen" box
         const wealthEl = document.getElementById('plan-wealth');
-        if(wealthEl) wealthEl.innerText = wealth.toLocaleString('de-DE', {style:'currency', currency:'EUR'});
+        if(wealthEl) wealthEl.innerText = requiredWealth.toLocaleString('de-DE', {style:'currency', currency:'EUR'});
         
-        const passive = (wealth * yld) / 12;
+        // Display Projected Passive Income (to see if it matches the goal)
+        const passive = (projectedWealth * yld) / 12;
         const passiveEl = document.getElementById('plan-passive');
         if(passiveEl) passiveEl.innerText = passive.toLocaleString('de-DE', {style:'currency', currency:'EUR'});
         
@@ -545,11 +552,11 @@ const Planner = {
         const gapLabel = document.getElementById('plan-gap-label');
         if(gapEl && gapLabel) {
             if(gap > 0) {
-                gapLabel.innerText = "Status Lücke";
+                gapLabel.innerText = "Status Lücke (mtl.)";
                 gapEl.innerText = gap.toLocaleString('de-DE', {style:'currency', currency:'EUR'});
                 gapEl.className = "text-xl font-bold text-blue-400 mono mt-1";
             } else {
-                gapLabel.innerText = "Status Überschuss";
+                gapLabel.innerText = "Status Überschuss (mtl.)";
                 gapEl.innerText = "+" + Math.abs(gap).toLocaleString('de-DE', {style:'currency', currency:'EUR'});
                 gapEl.className = "text-xl font-bold text-emerald-400 mono mt-1";
             }
@@ -560,14 +567,15 @@ const Planner = {
         Store.state.plan = {goal, age, target: targetAge, save, ret: rate*100, yld: yld*100};
         Store.commit();
         
+        // Update Dashboard Elements directly to keep in sync
         const dashboardTarget = document.getElementById('goal-target-text');
         const dashboardProgress = document.getElementById('wealth-progress');
         
         if(dashboardTarget) {
-            dashboardTarget.innerText = `Ziel: ${wealth.toLocaleString('de-DE', {maximumFractionDigits:0})} €`;
+            dashboardTarget.innerText = `Ziel: ${requiredWealth.toLocaleString('de-DE', {maximumFractionDigits:0})} €`;
         }
-        if(dashboardProgress && wealth > 0) {
-            const progress = Math.min((startCap / wealth) * 100, 100);
+        if(dashboardProgress && requiredWealth > 0) {
+            const progress = Math.min((startCap / requiredWealth) * 100, 100);
             dashboardProgress.style.width = `${progress}%`;
         }
     },
@@ -578,7 +586,7 @@ const Planner = {
             type: 'line', 
             data: { 
                 labels: labels, 
-                datasets: [{ label: 'Vermögen', data: data, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.4 }] 
+                datasets: [{ label: 'Vermögensentwicklung', data: data, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.4 }] 
             }, 
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#475569' } } } } 
         });
@@ -697,21 +705,13 @@ const UI = {
         const kpiNav = document.getElementById('kpi-nav');
         if(kpiNav) kpiNav.innerText = totVal.toLocaleString('de-DE', {style:'currency', currency:'EUR'});
 
+        // FIX: Calculate Target separate from projection logic
         const plan = Store.state.plan;
-        const age = parseFloat(plan.age) || 35;
-        const targetAge = parseFloat(plan.target) || 55;
-        const save = parseFloat(plan.save) || 1000;
-        const rate = (parseFloat(plan.ret) || 7.0) / 100;
+        const pYield = (parseFloat(plan.yld) || 3.5) / 100;
+        const pGoal = parseFloat(plan.goal) || 2500;
         
-        let projectedWealth = totVal; 
-        const years = Math.max(0, targetAge - age);
-        
-        for(let i=0; i<=years; i++) { 
-             projectedWealth = (projectedWealth + (save * 12)) * (1 + rate);
-        }
-
-        const totalGoal = projectedWealth;
-        const targetYear = new Date().getFullYear() + years;
+        // This is the FIXED Goal Number (Financial Freedom Capital)
+        const totalGoal = (pGoal * 12) / pYield;
         
         const progress = totalGoal > 0 ? Math.min((totVal / totalGoal) * 100, 100) : 0;
         document.getElementById('wealth-progress').style.width = `${progress}%`;
@@ -728,7 +728,8 @@ const UI = {
         }
 
         const dateEl = document.getElementById('wealth-date');
-        dateEl.innerText = "Zieljahr: " + targetYear;
+        const targetYear = new Date().getFullYear() + Math.max(0, (parseFloat(plan.target)||55) - (parseFloat(plan.age)||35));
+        dateEl.innerText = "Zieljahr (Plan): " + targetYear;
         
         Planner.calc(); 
         UI.renderArchive();
